@@ -5,9 +5,9 @@ import logging as log
 from tqdm import tqdm
 from sklearn.svm import SVC
 from typing import Callable, Tuple, List
+from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.metrics import confusion_matrix, classification_report
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler, PolynomialFeatures
+from sklearn.metrics import confusion_matrix, classification_report, accuracy_score, precision_score, recall_score, f1_score
 from skimage.feature import (
     hog,
     local_binary_pattern,
@@ -35,14 +35,17 @@ FOLDERS = os.listdir(TRAIN_PATH)
 VERBOSE = True
 
 # Output path info
-OUTPUT_PATH = os.path.join("..", "out", "data")
+OUTPUT_PATH = os.path.join("..", "out")
 
 # Other info
+IS_LOCAL = True
 USE_CACHE = True
-USE_DB = False
+USE_DB = True
 if USE_DB:
-    import mysql.connector
-    from mysql.connector import Error
+    if IS_LOCAL:
+        import sqlite3
+    else:
+        import mysql.connector
 
 
 def load_dataset_info(path: str, verbose: bool = False) -> np.ndarray:
@@ -160,9 +163,106 @@ def extract_histogram_features(img) -> np.ndarray:
     return np.array(cv2.calcHist([img], [0], None, [256], [0, 256]).flatten())
 
 
+def save_to_db(
+    name: str,
+    best_params: dict,
+    best_score: float,
+    precision: float,
+    recall: float,
+    f1_score: float,
+    support: float,
+    is_val: bool = True,
+):
+    """Save the given info to the database."""
+    if not USE_DB:
+        return
+    if IS_LOCAL:
+        conn = sqlite3.connect(os.path.join("..", "out", "svm.sqlite3"))
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS svm (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                best_params TEXT NOT NULL,
+                best_score REAL NOT NULL,
+                precision REAL NOT NULL,
+                recall REAL NOT NULL,
+                f1_score REAL NOT NULL,
+                support REAL NOT NULL,
+                is_val INTEGER NOT NULL
+            );
+            """
+        )
+        cursor.execute(
+            """
+            INSERT INTO svm (name, best_params, best_score, precision, recall, f1_score, support, is_val)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            """,
+            (name, str(best_params), best_score, precision, recall, f1_score, support, int(is_val)),
+        )
+    else:
+        conn = mysql.connector.connect(host="localhost", user="root", password="")
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS svm (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                best_params VARCHAR(255) NOT NULL,
+                best_score FLOAT NOT NULL,
+                precision FLOAT NOT NULL,
+                recall FLOAT NOT NULL,
+                f1_score FLOAT NOT NULL,
+                support FLOAT NOT NULL,
+                is_val TINYINT NOT NULL
+            );
+            """
+        )
+        cursor.execute(
+            """
+            INSERT INTO svm (name, best_params, best_score, precision, recall, f1_score, support, is_val)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
+            """,
+            (name, str(best_params), best_score, precision, recall, f1_score, support, int(is_val)),
+        )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def get_x_and_y(
+    name: str,
+    path: str,
+    is_train: bool,
+    dataset_info: np.ndarray,
+    apply_func: Callable,
+    func_args: Tuple,
+    verbose: bool = False,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Get X and y from the given dataset."""
+    log.info(f"Extracting {name} features...")
+    out_path = "train" if is_train else "test"
+    if (
+        USE_CACHE
+        and os.path.exists(os.path.join(OUTPUT_PATH, out_path, f"X_{name}.npy"))
+        and os.path.exists(os.path.join(OUTPUT_PATH, out_path, f"y_{name}.npy"))
+    ):
+        log.info(f"Loading {name} features from cache...")
+        X = np.load(os.path.join(OUTPUT_PATH, out_path, f"X_{name}.npy"))
+        y = np.load(os.path.join(OUTPUT_PATH, out_path, f"y_{name}.npy"))
+    else:
+        X, y = load_dataset(path, dataset_info, apply_func=apply_func, func_args=func_args, verbose=verbose)
+        log.info(f"Saving {name} features...")
+        np.save(os.path.join(OUTPUT_PATH, out_path, f"X_{name}.npy"), X)
+        np.save(os.path.join(OUTPUT_PATH, out_path, f"y_{name}.npy"), y)
+    return X, y
+
+
 if __name__ == "__main__":
     log.info("Loading dataset information...")
     dataset_info = load_dataset_info(TRAIN_PATH, verbose=VERBOSE)
+    dataset_test_info = load_dataset_info(TEST_PATH, verbose=VERBOSE)
     log.info("Loading dataset...")
     # name, func, func_args
     feautes_map: List[Tuple[str, Callable, Tuple]] = [
@@ -178,22 +278,53 @@ if __name__ == "__main__":
         ("multiblock_lbp", extract_multiblock_lbp_features, ()),
         ("histogram", extract_histogram_features, ()),
     ]
+    # Train and validation to find best parameters for SVM
     for name, func, args in feautes_map:
-        log.info(f"Extracting {name} features...")
-        if USE_CACHE and os.path.exists(os.path.join(OUTPUT_PATH, f"X_{name}.npy")):
-            log.info(f"Loading {name} features from cache...")
-            X = np.load(os.path.join(OUTPUT_PATH, f"X_{name}.npy"))
-            y = np.load(os.path.join(OUTPUT_PATH, f"y_{name}.npy"))
-        else:
-            X, y = load_dataset(TRAIN_PATH, dataset_info, apply_func=func, func_args=args, verbose=VERBOSE)
-            log.info(f"Saving {name} features...")
-            np.save(os.path.join(OUTPUT_PATH, f"X_{name}.npy"), X)
-            np.save(os.path.join(OUTPUT_PATH, f"y_{name}.npy"), y)
-
-    # TODO:
-    # Load datasets and for each dataset:
-    #   - Split into train and test
-    #   - Scale train and test
-    #   - Train SVM, with grid search using different kernels and parameters
-    #   - Evaluate on test set
-    #   - Save results
+        X, y = get_x_and_y(name, TRAIN_PATH, True, dataset_info, func, args, verbose=VERBOSE)
+        # Split into train and validation
+        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.15, random_state=42)
+        # Scale train and validation
+        scaler = StandardScaler()
+        X_train, X_val = scaler.fit_transform(X_train), scaler.transform(X_val)
+        # Train SVM, with grid search using different kernels and parameters
+        log.info(f"Training SVM using {name} features...")
+        params = {
+            "C": [0.1, 1, 10, 100],
+            "kernel": ["linear", "poly", "rbf", "sigmoid"],
+            "gamma": [1, 0.1, 0.01, 0.001, 0.0001, "scale", "auto"],
+        }
+        verb = 1 if VERBOSE else 0
+        grid = GridSearchCV(SVC(), params, refit=True, n_jobs=-1, cv=5, verbose=verb)
+        grid.fit(X_train, y_train)
+        log.info(f"Best parameters for {name} features: {grid.best_params_}, best score: {grid.best_score_}")
+        model = grid.best_estimator_
+        # Evaluate on validation set
+        y_pred = model.predict(X_val)
+        log.info(f"Classification report for {name} features:")
+        log.info(classification_report(y_val, y_pred, zero_division=0))
+        log.info(f"Confusion matrix for {name} features:")
+        log.info(confusion_matrix(y_val, y_pred))
+        # Save info to database
+        precision_ = precision_score(y_val, y_pred, average="macro", zero_division=0)
+        recall_ = recall_score(y_val, y_pred, average="macro", zero_division=0)
+        f1_score_ = f1_score(y_val, y_pred, average="macro", zero_division=0)
+        support_ = accuracy_score(y_val, y_pred)
+        save_to_db(name, grid.best_params_, grid.best_score_, precision_, recall_, f1_score_, support_, is_val=True)
+        # Ecaluate on test set
+        log.info(f"Evaluating on test set using {name} features...")
+        X_test, y_test = get_x_and_y(name, TEST_PATH, False, dataset_test_info, func, args, verbose=VERBOSE)
+        # Scale test
+        X_test = scaler.transform(X_test)
+        # Predict
+        y_pred = model.predict(X_test)
+        # Evaluate
+        log.info(f"Classification report for {name} features:")
+        log.info(classification_report(y_test, y_pred, zero_division=0))
+        log.info(f"Confusion matrix for {name} features:")
+        log.info(confusion_matrix(y_test, y_pred))
+        # Save info to database
+        precision_ = precision_score(y_test, y_pred, average="macro", zero_division=0)
+        recall_ = recall_score(y_test, y_pred, average="macro", zero_division=0)
+        f1_score_ = f1_score(y_test, y_pred, average="macro", zero_division=0)
+        support_ = accuracy_score(y_test, y_pred)
+        save_to_db(name, grid.best_params_, grid.best_score_, precision_, recall_, f1_score_, support_, is_val=False)
