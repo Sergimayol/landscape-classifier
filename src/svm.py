@@ -58,7 +58,13 @@ def load_dataset_info(path: str, verbose: bool = False) -> np.ndarray:
 
 
 def load_dataset(
-    path: str, dataset: np.ndarray, img_size=(32, 32), apply_func: Callable = None, func_args: Tuple = (), verbose: bool = False
+    path: str,
+    dataset: np.ndarray,
+    img_size=(32, 32),
+    applay_flatt: bool = True,
+    apply_func: Callable = None,
+    func_args: Tuple = (),
+    verbose: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Load dataset from the given path and dataset information.
@@ -90,7 +96,9 @@ def load_dataset(
         img = cv2.resize(img, img_size)
         if apply_func is not None:
             img = apply_func(img, *func_args)
-        X.append(img.flatten())
+        if applay_flatt:
+            img = img.flatten()
+        X.append(img)
         y.append(data["label"])
     return np.array(X), np.array(y)
 
@@ -171,17 +179,20 @@ def save_to_db(
     recall: float,
     f1_score: float,
     support: float,
+    img_size: Tuple[int, int],
+    is_flattened: bool,
     is_val: bool = True,
 ):
     """Save the given info to the database."""
     if not USE_DB:
         return
+    
     if IS_LOCAL:
         conn = sqlite3.connect(os.path.join("..", "out", "svm.sqlite3"))
         cursor = conn.cursor()
         cursor.execute(
             """
-            CREATE TABLE IF NOT EXISTS svm (
+            CREATE TABLE IF NOT EXISTS svm_train (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 best_params TEXT NOT NULL,
@@ -190,23 +201,25 @@ def save_to_db(
                 recall REAL NOT NULL,
                 f1_score REAL NOT NULL,
                 support REAL NOT NULL,
+                img_size TEXT NOT NULL,
+                is_flattened INTEGER NOT NULL,
                 is_val INTEGER NOT NULL
             );
             """
         )
         cursor.execute(
             """
-            INSERT INTO svm (name, best_params, best_score, precision, recall, f1_score, support, is_val)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            INSERT INTO svm_train (name, best_params, best_score, precision, recall, f1_score, support, img_size, is_flattened, is_val)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
-            (name, str(best_params), best_score, precision, recall, f1_score, support, int(is_val)),
+            (name, str(best_params), best_score, precision, recall, f1_score, support, str(img_size), int(is_flattened), int(is_val)),
         )
     else:
         conn = mysql.connector.connect(host="localhost", user="root", password="")
         cursor = conn.cursor()
         cursor.execute(
             """
-            CREATE TABLE IF NOT EXISTS svm (
+            CREATE TABLE IF NOT EXISTS svm_train (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
                 best_params VARCHAR(255) NOT NULL,
@@ -221,10 +234,10 @@ def save_to_db(
         )
         cursor.execute(
             """
-            INSERT INTO svm (name, best_params, best_score, precision, recall, f1_score, support, is_val)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
+            INSERT INTO svm_train (name, best_params, best_score, precision, recall, f1_score, support, img_size, is_flattened, is_val)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
             """,
-            (name, str(best_params), best_score, precision, recall, f1_score, support, int(is_val)),
+            (name, str(best_params), best_score, precision, recall, f1_score, support, str(img_size), int(is_flattened), int(is_val)),
         )
     conn.commit()
     cursor.close()
@@ -238,6 +251,8 @@ def get_x_and_y(
     dataset_info: np.ndarray,
     apply_func: Callable,
     func_args: Tuple,
+    apply_flatten: bool = True,
+    img_size: Tuple[int, int] = (32, 32),
     verbose: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Get X and y from the given dataset."""
@@ -252,7 +267,7 @@ def get_x_and_y(
         X = np.load(os.path.join(OUTPUT_PATH, out_path, f"X_{name}.npy"))
         y = np.load(os.path.join(OUTPUT_PATH, out_path, f"y_{name}.npy"))
     else:
-        X, y = load_dataset(path, dataset_info, apply_func=apply_func, func_args=func_args, verbose=verbose)
+        X, y = load_dataset(path, dataset_info, img_size, apply_flatten, apply_func=apply_func, func_args=func_args, verbose=verbose)
         log.info(f"Saving {name} features...")
         np.save(os.path.join(OUTPUT_PATH, out_path, f"X_{name}.npy"), X)
         np.save(os.path.join(OUTPUT_PATH, out_path, f"y_{name}.npy"), y)
@@ -278,9 +293,11 @@ if __name__ == "__main__":
         ("multiblock_lbp", extract_multiblock_lbp_features, ()),
         ("histogram", extract_histogram_features, ()),
     ]
+    img_size = (32, 32)
+    apply_flatten = True
     # Train and validation to find best parameters for SVM
     for name, func, args in feautes_map:
-        X, y = get_x_and_y(name, TRAIN_PATH, True, dataset_info, func, args, verbose=VERBOSE)
+        X, y = get_x_and_y(name, TRAIN_PATH, True, dataset_info, func, args, apply_flatten, img_size, verbose=VERBOSE)
         # Split into train and validation
         X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.15, random_state=42)
         # Scale train and validation
@@ -309,10 +326,12 @@ if __name__ == "__main__":
         recall_ = recall_score(y_val, y_pred, average="macro", zero_division=0)
         f1_score_ = f1_score(y_val, y_pred, average="macro", zero_division=0)
         support_ = accuracy_score(y_val, y_pred)
-        save_to_db(name, grid.best_params_, grid.best_score_, precision_, recall_, f1_score_, support_, is_val=True)
+        save_to_db(
+            name, grid.best_params_, grid.best_score_, precision_, recall_, f1_score_, support_, img_size, apply_flatten, is_val=True
+        )
         # Ecaluate on test set
         log.info(f"Evaluating on test set using {name} features...")
-        X_test, y_test = get_x_and_y(name, TEST_PATH, False, dataset_test_info, func, args, verbose=VERBOSE)
+        X_test, y_test = get_x_and_y(name, TEST_PATH, False, dataset_test_info, func, args, apply_flatten, img_size, verbose=VERBOSE)
         # Scale test
         X_test = scaler.transform(X_test)
         # Predict
@@ -327,4 +346,6 @@ if __name__ == "__main__":
         recall_ = recall_score(y_test, y_pred, average="macro", zero_division=0)
         f1_score_ = f1_score(y_test, y_pred, average="macro", zero_division=0)
         support_ = accuracy_score(y_test, y_pred)
-        save_to_db(name, grid.best_params_, grid.best_score_, precision_, recall_, f1_score_, support_, is_val=False)
+        save_to_db(
+            name, grid.best_params_, grid.best_score_, precision_, recall_, f1_score_, support_, img_size, apply_flatten, is_val=False
+        )
