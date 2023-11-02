@@ -7,6 +7,7 @@ from sklearn.svm import SVC
 from typing import Callable, Tuple, List
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split, GridSearchCV
+from settings import DB_PATH, TRAIN_PATH, TEST_PATH, USE_CACHE, VERBOSE, OUTPUT_PATH, IS_LOCAL, USE_DB, IS_LOCAL, USE_DB
 from sklearn.metrics import confusion_matrix, classification_report, accuracy_score, precision_score, recall_score, f1_score
 from skimage.feature import (
     hog,
@@ -25,22 +26,6 @@ from skimage.feature import (
 log.basicConfig(level=log.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
 
-# Data path info
-DATA_PATH = os.path.join("..", "data", "a2", "data")
-TRAIN_PATH = os.path.join(DATA_PATH, "train")
-TEST_PATH = os.path.join(DATA_PATH, "test")
-FOLDERS = os.listdir(TRAIN_PATH)
-
-# Verbose flag
-VERBOSE = True
-
-# Output path info
-OUTPUT_PATH = os.path.join("..", "out")
-
-# Other info
-IS_LOCAL = True
-USE_CACHE = True
-USE_DB = True
 if USE_DB:
     if IS_LOCAL:
         import sqlite3
@@ -187,7 +172,7 @@ def save_to_db(
         return
 
     if IS_LOCAL:
-        conn = sqlite3.connect(os.path.join("..", "out", "svm.sqlite3"))
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute(
             """
