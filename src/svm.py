@@ -288,7 +288,7 @@ if __name__ == "__main__":
         ("blob_doh", extract_blob_features, ("doh",)),
         ("canny", extract_canny_features, ()),
         ("daisy", extract_daisy_features, ()),
-        ("haar", extract_haar_features, ()),
+        # ("haar", extract_haar_features, ()),
         ("hessian", extract_hessian_features, ()),
         ("multiblock_lbp", extract_multiblock_lbp_features, ()),
         ("histogram", extract_histogram_features, ()),
@@ -304,6 +304,9 @@ if __name__ == "__main__":
                 X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.15, random_state=42)
                 # Scale train and validation
                 scaler = StandardScaler()
+                X_train = X_train.reshape(X_train.shape[0], -1)
+                X_val = X_val.reshape(X_val.shape[0], -1)
+                assert X_train.shape[1] == X_val.shape[1] and len(X_train.shape) == len(X_val.shape) <= 2
                 X_train, X_val = scaler.fit_transform(X_train), scaler.transform(X_val)
                 # Train SVM, with grid search using different kernels and parameters
                 log.info(f"Training SVM using {name} features...")
