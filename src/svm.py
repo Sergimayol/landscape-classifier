@@ -186,7 +186,7 @@ def save_to_db(
     """Save the given info to the database."""
     if not USE_DB:
         return
-    
+
     if IS_LOCAL:
         conn = sqlite3.connect(os.path.join("..", "out", "svm.sqlite3"))
         cursor = conn.cursor()
@@ -293,59 +293,81 @@ if __name__ == "__main__":
         ("multiblock_lbp", extract_multiblock_lbp_features, ()),
         ("histogram", extract_histogram_features, ()),
     ]
-    img_size = (32, 32)
-    apply_flatten = True
-    # Train and validation to find best parameters for SVM
-    for name, func, args in feautes_map:
-        X, y = get_x_and_y(name, TRAIN_PATH, True, dataset_info, func, args, apply_flatten, img_size, verbose=VERBOSE)
-        # Split into train and validation
-        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.15, random_state=42)
-        # Scale train and validation
-        scaler = StandardScaler()
-        X_train, X_val = scaler.fit_transform(X_train), scaler.transform(X_val)
-        # Train SVM, with grid search using different kernels and parameters
-        log.info(f"Training SVM using {name} features...")
-        params = {
-            "C": [0.1, 1, 10, 100],
-            "kernel": ["linear", "poly", "rbf", "sigmoid"],
-            "gamma": [1, 0.1, 0.01, 0.001, 0.0001, "scale", "auto"],
-        }
-        verb = 1 if VERBOSE else 0
-        grid = GridSearchCV(SVC(), params, refit=True, n_jobs=-1, cv=5, verbose=verb)
-        grid.fit(X_train, y_train)
-        log.info(f"Best parameters for {name} features: {grid.best_params_}, best score: {grid.best_score_}")
-        model = grid.best_estimator_
-        # Evaluate on validation set
-        y_pred = model.predict(X_val)
-        log.info(f"Classification report for {name} features:")
-        log.info(classification_report(y_val, y_pred, zero_division=0))
-        log.info(f"Confusion matrix for {name} features:")
-        log.info(confusion_matrix(y_val, y_pred))
-        # Save info to database
-        precision_ = precision_score(y_val, y_pred, average="macro", zero_division=0)
-        recall_ = recall_score(y_val, y_pred, average="macro", zero_division=0)
-        f1_score_ = f1_score(y_val, y_pred, average="macro", zero_division=0)
-        support_ = accuracy_score(y_val, y_pred)
-        save_to_db(
-            name, grid.best_params_, grid.best_score_, precision_, recall_, f1_score_, support_, img_size, apply_flatten, is_val=True
-        )
-        # Ecaluate on test set
-        log.info(f"Evaluating on test set using {name} features...")
-        X_test, y_test = get_x_and_y(name, TEST_PATH, False, dataset_test_info, func, args, apply_flatten, img_size, verbose=VERBOSE)
-        # Scale test
-        X_test = scaler.transform(X_test)
-        # Predict
-        y_pred = model.predict(X_test)
-        # Evaluate
-        log.info(f"Classification report for {name} features:")
-        log.info(classification_report(y_test, y_pred, zero_division=0))
-        log.info(f"Confusion matrix for {name} features:")
-        log.info(confusion_matrix(y_test, y_pred))
-        # Save info to database
-        precision_ = precision_score(y_test, y_pred, average="macro", zero_division=0)
-        recall_ = recall_score(y_test, y_pred, average="macro", zero_division=0)
-        f1_score_ = f1_score(y_test, y_pred, average="macro", zero_division=0)
-        support_ = accuracy_score(y_test, y_pred)
-        save_to_db(
-            name, grid.best_params_, grid.best_score_, precision_, recall_, f1_score_, support_, img_size, apply_flatten, is_val=False
-        )
+    imgs_sizes = [(32, 32), (64, 64), (128, 128)]
+    for img_size in imgs_sizes:
+        for apl_flat in [0, 1]: # apply_flatten -> no/yes
+            apply_flatten = bool(apl_flat)
+            # Train and validation to find best parameters for SVM
+            for name, func, args in feautes_map:
+                X, y = get_x_and_y(name, TRAIN_PATH, True, dataset_info, func, args, apply_flatten, img_size, verbose=VERBOSE)
+                # Split into train and validation
+                X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.15, random_state=42)
+                # Scale train and validation
+                scaler = StandardScaler()
+                X_train, X_val = scaler.fit_transform(X_train), scaler.transform(X_val)
+                # Train SVM, with grid search using different kernels and parameters
+                log.info(f"Training SVM using {name} features...")
+                params = {
+                    "C": [0.1, 1, 10, 100],
+                    "kernel": ["linear", "poly", "rbf", "sigmoid"],
+                    "gamma": [1, 0.1, 0.01, 0.001, 0.0001, "scale", "auto"],
+                }
+                verb = 1 if VERBOSE else 0
+                grid = GridSearchCV(SVC(), params, refit=True, n_jobs=-1, cv=5, verbose=verb)
+                grid.fit(X_train, y_train)
+                log.info(f"Best parameters for {name} features: {grid.best_params_}, best score: {grid.best_score_}")
+                model = grid.best_estimator_
+                # Evaluate on validation set
+                y_pred = model.predict(X_val)
+                log.info(f"Classification report for {name} features:")
+                log.info(classification_report(y_val, y_pred, zero_division=0))
+                log.info(f"Confusion matrix for {name} features:")
+                log.info(confusion_matrix(y_val, y_pred))
+                # Save info to database
+                precision_ = precision_score(y_val, y_pred, average="macro", zero_division=0)
+                recall_ = recall_score(y_val, y_pred, average="macro", zero_division=0)
+                f1_score_ = f1_score(y_val, y_pred, average="macro", zero_division=0)
+                support_ = accuracy_score(y_val, y_pred)
+                save_to_db(
+                    name,
+                    grid.best_params_,
+                    grid.best_score_,
+                    precision_,
+                    recall_,
+                    f1_score_,
+                    support_,
+                    img_size,
+                    apply_flatten,
+                    is_val=True,
+                )
+                # Ecaluate on test set
+                log.info(f"Evaluating on test set using {name} features...")
+                X_test, y_test = get_x_and_y(
+                    name, TEST_PATH, False, dataset_test_info, func, args, apply_flatten, img_size, verbose=VERBOSE
+                )
+                # Scale test
+                X_test = scaler.transform(X_test)
+                # Predict
+                y_pred = model.predict(X_test)
+                # Evaluate
+                log.info(f"Classification report for {name} features:")
+                log.info(classification_report(y_test, y_pred, zero_division=0))
+                log.info(f"Confusion matrix for {name} features:")
+                log.info(confusion_matrix(y_test, y_pred))
+                # Save info to database
+                precision_ = precision_score(y_test, y_pred, average="macro", zero_division=0)
+                recall_ = recall_score(y_test, y_pred, average="macro", zero_division=0)
+                f1_score_ = f1_score(y_test, y_pred, average="macro", zero_division=0)
+                support_ = accuracy_score(y_test, y_pred)
+                save_to_db(
+                    name,
+                    grid.best_params_,
+                    grid.best_score_,
+                    precision_,
+                    recall_,
+                    f1_score_,
+                    support_,
+                    img_size,
+                    apply_flatten,
+                    is_val=False,
+                )
