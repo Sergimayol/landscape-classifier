@@ -47,23 +47,23 @@ def __save_to_local_db(
         """
         CREATE TABLE IF NOT EXISTS svm_train (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
+            name VARCHAR(255) NOT NULL,
             best_params TEXT NOT NULL,
             best_score REAL NOT NULL,
-            precision REAL NOT NULL,
-            recall REAL NOT NULL,
+            precision_score REAL NOT NULL,
+            recall_score REAL NOT NULL,
             f1_score REAL NOT NULL,
-            support REAL NOT NULL,
+            support_score REAL NOT NULL,
             img_size TEXT NOT NULL,
             classification_report TEXT,
-            confusion_matrix nparray,
-            is_val INTEGER NOT NULL
+            confusion_matrix LONGBLOB,
+            is_val BOOLEAN NOT NULL
         );
         """
     )
     cursor.execute(
         """
-        INSERT INTO svm_train (name, best_params, best_score, precision, recall, f1_score, support, img_size, classification_report, is_val)
+        INSERT INTO svm_train (name, best_params, best_score, precision_score, recall_score, f1_score, support_score, img_size, classification_report, confusion_matrix, is_val)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """,
         (
