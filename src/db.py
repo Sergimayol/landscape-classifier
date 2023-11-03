@@ -123,7 +123,7 @@ def __save_to_remote_db(
     cursor.execute(
         """
         INSERT INTO svm_train (name, best_params, best_score, precision_score, recall_score, f1_score, support_score, img_size, classification_report, confusion_matrix, is_val)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
         """,
         (
             name,
