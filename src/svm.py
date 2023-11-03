@@ -1,36 +1,29 @@
 import os
 import cv2
 import numpy as np
-import logging as log
 from tqdm import tqdm
+import logging as log
 from sklearn.svm import SVC
 from typing import Callable, Tuple, List
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split, GridSearchCV
-from settings import DB_PATH, TRAIN_PATH, TEST_PATH, USE_CACHE, VERBOSE, OUTPUT_PATH, IS_LOCAL, USE_DB, IS_LOCAL, USE_DB
 from sklearn.metrics import confusion_matrix, classification_report, accuracy_score, precision_score, recall_score, f1_score
-from skimage.feature import (
-    hog,
-    local_binary_pattern,
-    blob_dog,
-    blob_log,
-    blob_doh,
-    canny,
-    daisy,
-    haar_like_feature,
-    hessian_matrix_det,
-    multiblock_lbp,
+
+from db import allow_numpy, save_to_db
+from settings import TRAIN_PATH, TEST_PATH, USE_CACHE, VERBOSE, OUTPUT_PATH, WORKERS
+from preprocessor import (
+    extract_blob_features,
+    extract_canny_features,
+    extract_daisy_features,
+    extract_hessian_features,
+    extract_hog_features,
+    extract_histogram_features,
+    extract_lbp_features,
+    extract_multiblock_lbp_features,
 )
 
 # logging configuration, set level to INFO, format to [YYYY-MM-DD HH:MM:SS] [LEVEL] MESSAGE
 log.basicConfig(level=log.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-
-
-if USE_DB:
-    if IS_LOCAL:
-        import sqlite3
-    else:
-        import mysql.connector
 
 
 def load_dataset_info(path: str, verbose: bool = False) -> np.ndarray:
@@ -88,146 +81,6 @@ def load_dataset(
     return np.array(X), np.array(y)
 
 
-def extract_hog_features(img) -> np.ndarray:
-    """Extract HOG features from the given image in grayscale."""
-    fd = hog(
-        img,
-        orientations=9,
-        pixels_per_cell=(8, 8),
-        cells_per_block=(2, 2),
-        block_norm="L2-Hys",
-        visualize=False,
-        transform_sqrt=True,
-        feature_vector=True,
-    )
-    return np.array(fd)
-
-
-def extract_lbp_features(img) -> np.ndarray:
-    """Extract LBP features from the given dataset."""
-    return np.array(local_binary_pattern(img, 8, 1, method="uniform"))
-
-
-def extract_blob_features(img, blob_type: str = "dog") -> np.ndarray:
-    """Extract blob features from the given dataset."""
-    blob_type = blob_type.lower()
-    blob_map: dict[str, Callable] = {
-        "dog": blob_dog,
-        "log": blob_log,
-        "doh": blob_doh,
-    }
-    if blob_type not in blob_map:
-        raise ValueError(f"Invalid blob type: {blob_type}")
-    blob_func = blob_map[blob_type]
-    # length of the feature vector should be 256 if the features dont have size 256 pad with zeros
-    res = blob_func(img, max_sigma=30, threshold=0.1)
-    if res.shape[0] < 256:
-        return np.pad(res, ((0, 256 - res.shape[0]), (0, 0)), mode="constant")
-    return np.array(res)
-
-
-def extract_canny_features(img) -> np.ndarray:
-    """Extract canny features from the given dataset."""
-    return np.array(canny(img, sigma=3))
-
-
-def extract_daisy_features(img) -> np.ndarray:
-    """Extract daisy features from the given dataset."""
-    return np.array(daisy(img, step=180, radius=img.shape[0] // 8, rings=2, histograms=6, orientations=8))
-
-
-def extract_haar_features(img) -> np.ndarray:
-    """Extract haar features from the given dataset."""
-    return np.array(haar_like_feature(img, r=1, c=1, feature_type="type-2-x", height=25, width=25))
-
-
-def extract_hessian_features(img) -> np.ndarray:
-    """Extract hessian features from the given dataset."""
-    return np.array(hessian_matrix_det(img, sigma=1.0))
-
-
-def extract_multiblock_lbp_features(img) -> np.ndarray:
-    """Extract multiblock lbp features from the given dataset."""
-    return np.array(multiblock_lbp(img, r=3, c=3, width=8, height=8))
-
-
-def extract_histogram_features(img) -> np.ndarray:
-    """Extract histogram features from the given dataset."""
-    return np.array(cv2.calcHist([img], [0], None, [256], [0, 256]).flatten())
-
-
-def save_to_db(
-    name: str,
-    best_params: dict,
-    best_score: float,
-    precision: float,
-    recall: float,
-    f1_score: float,
-    support: float,
-    img_size: Tuple[int, int],
-    is_val: bool = True,
-):
-    """Save the given info to the database."""
-    if not USE_DB:
-        return
-
-    if IS_LOCAL:
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS svm_train (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                best_params TEXT NOT NULL,
-                best_score REAL NOT NULL,
-                precision REAL NOT NULL,
-                recall REAL NOT NULL,
-                f1_score REAL NOT NULL,
-                support REAL NOT NULL,
-                img_size TEXT NOT NULL,
-                is_val INTEGER NOT NULL
-            );
-            """
-        )
-        cursor.execute(
-            """
-            INSERT INTO svm_train (name, best_params, best_score, precision, recall, f1_score, support, img_size, is_val)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
-            """,
-            (name, str(best_params), best_score, precision, recall, f1_score, support, str(img_size), int(is_val)),
-        )
-    else:
-        conn = mysql.connector.connect(host="localhost", user="root", password="")
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS svm_train (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                name VARCHAR(255) NOT NULL,
-                best_params VARCHAR(255) NOT NULL,
-                best_score FLOAT NOT NULL,
-                precision FLOAT NOT NULL,
-                recall FLOAT NOT NULL,
-                f1_score FLOAT NOT NULL,
-                support FLOAT NOT NULL,
-                img_size VARCHAR(255) NOT NULL,
-                is_val TINYINT NOT NULL
-            );
-            """
-        )
-        cursor.execute(
-            """
-            INSERT INTO svm_train (name, best_params, best_score, precision, recall, f1_score, support, img_size, is_val)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s);
-            """,
-            (name, str(best_params), best_score, precision, recall, f1_score, support, str(img_size), int(is_val)),
-        )
-    conn.commit()
-    cursor.close()
-    conn.close()
-
-
 def get_x_and_y(
     name: str,
     path: str,
@@ -261,6 +114,7 @@ def get_x_and_y(
 
 
 if __name__ == "__main__":
+    allow_numpy()
     log.info("Loading dataset information...")
     dataset_info = load_dataset_info(TRAIN_PATH, verbose=VERBOSE)
     dataset_test_info = load_dataset_info(TEST_PATH, verbose=VERBOSE)
@@ -277,7 +131,6 @@ if __name__ == "__main__":
         ("hessian", extract_hessian_features, ()),
         ("multiblock_lbp", extract_multiblock_lbp_features, ()),
         ("histogram", extract_histogram_features, ()),
-        # ("haar", extract_haar_features, ()),
     ]
     imgs_sizes = [(32, 32), (64, 64), (128, 128)]
     for img_size in imgs_sizes:
@@ -286,7 +139,7 @@ if __name__ == "__main__":
         for name, func, args in feautes_map:
             X, y = get_x_and_y(name, TRAIN_PATH, True, dataset_info, func, args, img_size, verbose=VERBOSE)
             # Split into train and validation
-            X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.15, random_state=42)
+            X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.1, random_state=42)
             # Scale train and validation
             scaler = StandardScaler()
             X_train = scaler.fit_transform(X_train)
@@ -299,16 +152,18 @@ if __name__ == "__main__":
                 "gamma": [1, 0.1, 0.01, 0.001, 0.0001, "scale", "auto"],
             }
             verb = 1 if VERBOSE else 0
-            grid = GridSearchCV(SVC(), params, refit=True, n_jobs=-1, cv=5, verbose=verb)
+            grid = GridSearchCV(SVC(), params, refit=True, n_jobs=WORKERS, cv=5, verbose=verb)
             grid.fit(X_train, y_train)
             log.info(f"Best parameters for {name} features: {grid.best_params_}, best score: {grid.best_score_}")
             model = grid.best_estimator_
             # Evaluate on validation set
             y_pred = model.predict(X_val)
             log.info(f"Classification report for {name} features:")
-            log.info(classification_report(y_val, y_pred, zero_division=0))
+            class_rep = classification_report(y_val, y_pred, zero_division=0)
+            log.info(class_rep)
             log.info(f"Confusion matrix for {name} features:")
-            log.info(confusion_matrix(y_val, y_pred))
+            conf_mat = confusion_matrix(y_val, y_pred)
+            log.info(conf_mat)
             # Save info to database
             precision_ = precision_score(y_val, y_pred, average="macro", zero_division=0)
             recall_ = recall_score(y_val, y_pred, average="macro", zero_division=0)
@@ -323,6 +178,8 @@ if __name__ == "__main__":
                 f1_score_,
                 support_,
                 img_size,
+                class_rep,
+                conf_mat,
                 is_val=True,
             )
             # Ecaluate on test set
@@ -334,9 +191,11 @@ if __name__ == "__main__":
             y_pred = model.predict(X_test)
             # Evaluate
             log.info(f"Classification report for {name} features:")
-            log.info(classification_report(y_test, y_pred, zero_division=0))
+            class_rep = classification_report(y_test, y_pred, zero_division=0)
+            log.info(class_rep)
             log.info(f"Confusion matrix for {name} features:")
-            log.info(confusion_matrix(y_test, y_pred))
+            conf_mat = confusion_matrix(y_test, y_pred)
+            log.info(conf_mat)
             # Save info to database
             precision_ = precision_score(y_test, y_pred, average="macro", zero_division=0)
             recall_ = recall_score(y_test, y_pred, average="macro", zero_division=0)
@@ -351,5 +210,7 @@ if __name__ == "__main__":
                 f1_score_,
                 support_,
                 img_size,
+                class_rep,
+                conf_mat,
                 is_val=False,
             )

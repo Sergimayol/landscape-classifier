@@ -1,9 +1,5 @@
-from settings import IS_LOCAL, DB_PATH
-
-if IS_LOCAL:
-    import sqlite3
-else:
-    import mysql.connector
+import sqlite3
+from settings import DB_PATH
 
 
 if __name__ == "__main__":

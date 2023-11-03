@@ -13,9 +13,9 @@ VERBOSE = True
 OUTPUT_PATH = os.path.join("..", "out")
 
 # Other info
-IS_LOCAL = True
 USE_CACHE = True
 USE_DB = True
+WORKERS = -1
 
 # Database info
 DB_PATH = os.path.join("..", "out", "svm.sqlite3")
