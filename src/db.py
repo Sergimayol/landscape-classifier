@@ -111,7 +111,7 @@ def __save_to_remote_db(
             best_score REAL NOT NULL,
             precision_score REAL NOT NULL,
             recall_score REAL NOT NULL,
-            f1_score_score REAL NOT NULL,
+            f1_score REAL NOT NULL,
             support_score REAL NOT NULL,
             img_size TEXT NOT NULL,
             classification_report TEXT,
@@ -122,7 +122,7 @@ def __save_to_remote_db(
     )
     cursor.execute(
         """
-        INSERT INTO svm_train (name, best_params, best_score, precision, recall, f1_score, support, img_size, classification_report, is_val)
+        INSERT INTO svm_train (name, best_params, best_score, precision_score, recall_score, f1_score, support_score, img_size, classification_report, is_val)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
         """,
         (
