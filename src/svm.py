@@ -9,7 +9,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import confusion_matrix, classification_report, accuracy_score, precision_score, recall_score, f1_score
 
-from db import allow_numpy, save_to_db
+from db import save_to_db
 from settings import TRAIN_PATH, TEST_PATH, USE_CACHE, VERBOSE, OUTPUT_PATH, WORKERS
 from preprocessor import (
     extract_blob_features,
@@ -114,7 +114,6 @@ def get_x_and_y(
 
 
 if __name__ == "__main__":
-    allow_numpy()
     log.info("Loading dataset information...")
     dataset_info = load_dataset_info(TRAIN_PATH, verbose=VERBOSE)
     dataset_test_info = load_dataset_info(TEST_PATH, verbose=VERBOSE)

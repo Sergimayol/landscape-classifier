@@ -19,7 +19,7 @@ DB_IS_LOCAL = True
 WORKERS = -1
 
 # Database info
-DB_PATH = os.path.join("..", "out", "svm.sqlite3")
-MYSQL_HOST = os.environ.get("MYSQL_HOST", "localhost")
-MYSQL_USER = os.environ.get("MYSQL_USER", "root")
-MYSQL_PASSWORD = os.environ.get("MYSQL_PASSWORD", "root")
+DB_PATH = os.path.join("..", "out", "svm.db")
+MONGO_HOST = os.environ.get("MONGO_HOST", "localhost")
+MONGO_USER = os.environ.get("MONGO_USER", "root")
+MONGO_PASSWORD = os.environ.get("MONGO_PASSWORD", "root")
