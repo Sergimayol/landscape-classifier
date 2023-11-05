@@ -135,8 +135,7 @@ if __name__ == "__main__":
         "C": [0.1, 1, 10, 100],
         "kernel": ["linear", "poly", "rbf", "sigmoid"],
         "gamma": [1, 0.1, 0.01, 0.001, 0.0001, "scale", "auto"],
-        "degree": [1, 2, 3],
-        "coef0": [0.0, 0.1, 0.5, 1.0],
+        "coef0": [0.0, 0.1, 1.0],
         "class_weight": ["balanced", None],
     }
     verb = 1 if VERBOSE else 0
