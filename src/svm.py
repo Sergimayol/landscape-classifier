@@ -135,8 +135,8 @@ if __name__ == "__main__":
         "C": [0.1, 1, 10, 100],
         "kernel": ["linear", "poly", "rbf", "sigmoid"],
         "gamma": [1, 0.1, 0.01, 0.001, 0.0001, "scale", "auto"],
-        "coef0": [0.0, 0.1, 1.0],
-        "class_weight": ["balanced", None],
+        # "coef0": [0.0, 0.1, 1.0],
+        # "class_weight": ["balanced", None],
     }
     verb = 1 if VERBOSE else 0
     imgs_sizes = [(28, 28), (32, 32), (64, 64), (128, 128)]
