@@ -131,7 +131,16 @@ if __name__ == "__main__":
         ("multiblock_lbp", extract_multiblock_lbp_features, ()),
         ("histogram", extract_histogram_features, ()),
     ]
-    imgs_sizes = [(32, 32), (64, 64), (128, 128)]
+    params = {
+        "C": [0.1, 1, 10, 100],
+        "kernel": ["linear", "poly", "rbf", "sigmoid"],
+        "gamma": [1, 0.1, 0.01, 0.001, 0.0001, "scale", "auto"],
+        "degree": [1, 2, 3, 4, 5, 6, 7, 8, 9],
+        "coef0": [0.0, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0],
+        "class_weight": ["balanced", None],
+    }
+    verb = 1 if VERBOSE else 0
+    imgs_sizes = [(28, 28), (32, 32), (64, 64), (128, 128)]
     for img_size in imgs_sizes:
         # Train and validation to find best parameters for SVM
         log.info(f"Training and validating using {img_size} image size...")
@@ -145,12 +154,6 @@ if __name__ == "__main__":
             X_val = scaler.transform(X_val)
             # Train SVM, with grid search using different kernels and parameters
             log.info(f"Training SVM using {name} features...")
-            params = {
-                "C": [0.1, 1, 10, 100],
-                "kernel": ["linear", "poly", "rbf", "sigmoid"],
-                "gamma": [1, 0.1, 0.01, 0.001, 0.0001, "scale", "auto"],
-            }
-            verb = 1 if VERBOSE else 0
             grid = GridSearchCV(SVC(), params, refit=True, n_jobs=WORKERS, cv=5, verbose=verb)
             grid.fit(X_train, y_train)
             log.info(f"Best parameters for {name} features: {grid.best_params_}, best score: {grid.best_score_}")
