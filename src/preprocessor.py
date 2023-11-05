@@ -1,21 +1,25 @@
 import cv2
 import numpy as np
+from skimage import color
 from typing import Callable, Literal
-from skimage.feature import hog, local_binary_pattern, blob_dog, blob_log, blob_doh, canny, daisy, hessian_matrix_det, multiblock_lbp
+from skimage.feature import (
+    hog,
+    local_binary_pattern,
+    blob_dog,
+    blob_log,
+    blob_doh,
+    canny,
+    daisy,
+    hessian_matrix_det,
+    multiblock_lbp,
+    corner_fast,
+)
 
 
 def extract_hog_features(img) -> np.ndarray:
     """Extract HOG features from the given image in grayscale."""
-    fd = hog(
-        img,
-        orientations=9,
-        pixels_per_cell=(8, 8),
-        cells_per_block=(2, 2),
-        block_norm="L2-Hys",
-        visualize=False,
-        transform_sqrt=True,
-        feature_vector=True,
-    )
+    img = color.gray2rgb(img) if len(img.shape) == 2 else img
+    fd = hog(img, orientations=8, pixels_per_cell=(16, 16), cells_per_block=(1, 1), block_norm="L2-Hys", channel_axis=-1)
     return np.array(fd)
 
 
@@ -65,3 +69,8 @@ def extract_multiblock_lbp_features(img) -> np.ndarray:
 def extract_histogram_features(img) -> np.ndarray:
     """Extract histogram features from the given dataset."""
     return np.array(cv2.calcHist([img], [0], None, [256], [0, 256]).flatten())
+
+
+def extract_corner_features(img) -> np.ndarray:
+    """Extract corner features from the given dataset."""
+    return np.array(corner_fast(img))

@@ -96,6 +96,7 @@ def save_to_db(
 ):
     """Save the given info to the database."""
     if not USE_DB:
+        print("Database is not enabled. Skipping...")
         return
 
     if DB_IS_LOCAL:

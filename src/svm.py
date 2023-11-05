@@ -4,6 +4,7 @@ import numpy as np
 from tqdm import tqdm
 import logging as log
 from sklearn.svm import SVC
+from datetime import datetime
 from typing import Callable, Tuple, List
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split, GridSearchCV
@@ -20,29 +21,26 @@ from preprocessor import (
     extract_histogram_features,
     extract_lbp_features,
     extract_multiblock_lbp_features,
+    extract_corner_features,
 )
 
 # logging configuration, set level to INFO, format to [YYYY-MM-DD HH:MM:SS] [LEVEL] MESSAGE
 log.basicConfig(level=log.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
 
-def load_dataset_info(path: str, verbose: bool = False) -> np.ndarray:
+def load_dataset_info(path: str, except_labels: list[str] = [], verbose: bool = False) -> np.ndarray:
     """Load dataset information from the given path."""
     dataset = []
     for folder in tqdm(os.listdir(path), disable=not verbose, desc="Loading dataset info"):
+        if folder.lower() in except_labels:
+            continue
         for file in os.listdir(os.path.join(path, folder)):
-            dataset.append({"label": folder, "img_name": file})
+            dataset.append({"label": folder.lower(), "img_name": file})
     return np.array(dataset)
 
 
 def load_dataset(
-    path: str,
-    dataset: np.ndarray,
-    img_size=(32, 32),
-    applay_flatt: bool = True,
-    apply_func: Callable = None,
-    func_args: Tuple = (),
-    verbose: bool = False,
+    path: str, dataset: np.ndarray, img_size=(32, 32), apply_func: Callable = None, func_args: Tuple = (), verbose: bool = False
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Load dataset from the given path and dataset information.
@@ -74,8 +72,7 @@ def load_dataset(
         img = cv2.resize(img, img_size)
         if apply_func is not None:
             img = apply_func(img, *func_args)
-        if applay_flatt:
-            img = img.flatten()
+        img = img.flatten()
         X.append(img)
         y.append(data["label"])
     return np.array(X), np.array(y)
@@ -88,7 +85,6 @@ def get_x_and_y(
     dataset_info: np.ndarray,
     apply_func: Callable,
     func_args: Tuple,
-    apply_flatten: bool = True,
     img_size: Tuple[int, int] = (32, 32),
     verbose: bool = False,
 ) -> Tuple[np.ndarray, np.ndarray]:
@@ -104,7 +100,7 @@ def get_x_and_y(
         X = np.load(os.path.join(OUTPUT_PATH, out_path, f"X_{name}.npy"))
         y = np.load(os.path.join(OUTPUT_PATH, out_path, f"y_{name}.npy"))
     else:
-        X, y = load_dataset(path, dataset_info, img_size, apply_flatten, apply_func=apply_func, func_args=func_args, verbose=verbose)
+        X, y = load_dataset(path, dataset_info, img_size, apply_func=apply_func, func_args=func_args, verbose=verbose)
         log.info(f"Saving {name} features...")
         if not os.path.exists(os.path.join(OUTPUT_PATH, out_path)):
             os.makedirs(os.path.join(OUTPUT_PATH, out_path))
@@ -114,9 +110,10 @@ def get_x_and_y(
 
 
 if __name__ == "__main__":
+    start_time = datetime.now()
     log.info("Loading dataset information...")
     dataset_info = load_dataset_info(TRAIN_PATH, verbose=VERBOSE)
-    dataset_test_info = load_dataset_info(TEST_PATH, verbose=VERBOSE)
+    dataset_test_info = load_dataset_info(TEST_PATH, except_labels=["livingroom (case conflict)"], verbose=VERBOSE)
     log.info("Loading dataset...")
     # name, func, func_args
     feautes_map: List[Tuple[str, Callable, Tuple]] = [
@@ -130,6 +127,7 @@ if __name__ == "__main__":
         ("hessian", extract_hessian_features, ()),
         ("multiblock_lbp", extract_multiblock_lbp_features, ()),
         ("histogram", extract_histogram_features, ()),
+        ("corner", extract_corner_features, ()),
     ]
     params = {
         "C": [0.1, 1, 10, 100],
@@ -146,11 +144,12 @@ if __name__ == "__main__":
         for name, func, args in feautes_map:
             X, y = get_x_and_y(name, TRAIN_PATH, True, dataset_info, func, args, img_size, verbose=VERBOSE)
             # Split into train and validation
-            X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.1, random_state=42)
+            X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
             # Scale train and validation
             scaler = StandardScaler()
             X_train = scaler.fit_transform(X_train)
             X_val = scaler.transform(X_val)
+            log.info(f"Shape of X_train: {X_train.shape}, shape of X_val: {X_val.shape}")
             # Train SVM, with grid search using different kernels and parameters
             log.info(f"Training SVM using {name} features...")
             grid = GridSearchCV(SVC(), params, refit=True, n_jobs=WORKERS, cv=5, verbose=verb)
@@ -188,6 +187,7 @@ if __name__ == "__main__":
             X_test, y_test = get_x_and_y(name, TEST_PATH, False, dataset_test_info, func, args, img_size, verbose=VERBOSE)
             # Scale test
             X_test = scaler.transform(X_test)
+            log.info(f"Shape of X_test: {X_test.shape} and shape of y_test: {y_test.shape}")
             # Predict
             y_pred = model.predict(X_test)
             # Evaluate
@@ -215,3 +215,6 @@ if __name__ == "__main__":
                 conf_mat,
                 is_val=False,
             )
+
+    end = datetime.now()
+    log.info(f"Finished in {end - start_time}")
