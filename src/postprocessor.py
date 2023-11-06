@@ -103,7 +103,7 @@ if __name__ == "__main__":
     for doc in docs:
         if not doc.is_val:
             doc.best_score = (doc.precision + doc.recall + doc.f1_score + doc.support) / 4
-            doc.name += " (train)"
+            doc.name += " (test)"
         else:
             doc.name += " (val)"
 
