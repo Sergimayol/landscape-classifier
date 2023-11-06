@@ -1,4 +1,7 @@
+import os
 import random
+import seaborn as sns
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
 
@@ -85,6 +88,23 @@ def plot_val_vs_test(docs: list[Data]):
     plt.show()
 
 
+def generate_conf_mat(docs: list[Data]):
+    path = os.path.join("..", "out", "conf_mat")
+    if not os.path.exists(path):
+        os.makedirs(path)
+
+    for doc in tqdm(docs, desc="Generating confusion matrices"):
+        if doc.is_val:
+            fig, ax = plt.subplots(figsize=(10, 10))
+            sns.heatmap(doc.confusion_matrix, annot=True, ax=ax, fmt="d")
+            ax.set_title(doc.name)
+            ax.set_xlabel("Predicted")
+            ax.set_ylabel("Actual")
+            plt.tight_layout()
+            plt.savefig(os.path.join(path, f"{doc.name}.png"))
+            plt.close(fig)
+
+
 if __name__ == "__main__":
     if DB_IS_LOCAL:
         db = __connect_to_local_db()
@@ -107,6 +127,10 @@ if __name__ == "__main__":
         else:
             doc.name += " (val)"
 
+    # Generate the confusion matrices
+    generate_conf_mat(docs)
+
+    # Plot the best_score for each model
     plot_val_vs_test(docs)
 
     # Close the connection
