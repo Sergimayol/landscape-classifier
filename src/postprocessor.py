@@ -20,7 +20,7 @@ class Data:
     recall: float
     f1_score: float
     support: float
-    img_size: tuple
+    img_size: tuple[int, int]
     classification_report: str
     confusion_matrix: list[list[int]]
     is_val: bool
@@ -28,23 +28,59 @@ class Data:
 
 def plot_val_vs_test(docs: list[Data]):
     random.seed(42)
-    # Plot the best_score for each document on a bar chart
-    data = [(doc.name, doc.best_score) for doc in docs]
-    x, y = zip(*data)
-    _, ax = plt.subplots()
-    bars = ax.barh(x, y)
-    for i in range(0, len(bars), 2):
-        rand_color = "#%06x" % random.randint(0, 0xFFFFFF)
-        bars[i].set_color(rand_color)
-        bars[i + 1].set_color(rand_color)
-    ax.set_xlabel("Best Score")
-    ax.set_ylabel("Model")
-    ax.set_title("Best Score for each model (val vs test)")
-    ax.set_xlim(0, 1)
-    ax.set_xticks([0, 0.25, 0.5, 0.75, 1])
-    ax.set_xticklabels(["0%", "25%", "50%", "75%", "100%"])
-    ax.invert_yaxis()
-    ax.bar_label(bars, fmt="%.3f")
+    X_28, Y_28 = [], []
+    X_32, Y_32 = [], []
+    X_64, Y_64 = [], []
+    X_128, Y_128 = [], []
+    for doc in docs:
+        if doc.img_size[0] == 28:
+            X_28.append(doc.best_score)
+            Y_28.append(doc.name)
+        elif doc.img_size[0] == 32:
+            X_32.append(doc.best_score)
+            Y_32.append(doc.name)
+        elif doc.img_size[0] == 64:
+            X_64.append(doc.best_score)
+            Y_64.append(doc.name)
+        elif doc.img_size[0] == 128:
+            X_128.append(doc.best_score)
+            Y_128.append(doc.name)
+    _, axs = plt.subplots(2, 2, figsize=(10, 10))
+    for ax in axs.flat:
+        ax.set(xlabel="best_score", ylabel="name")
+
+    bars = []
+    for i, ax in enumerate(axs.ravel()):
+        if i == 0:
+            bh = ax.barh(Y_28, X_28)
+            bars.append(bh)
+            ax.set_title("28x28")
+        elif i == 1:
+            bh = ax.barh(Y_32, X_32)
+            bars.append(bh)
+            ax.set_title("32x32")
+        elif i == 2:
+            bh = ax.barh(Y_64, X_64)
+            bars.append(bh)
+            ax.set_title("64x64")
+        elif i == 3:
+            bh = ax.barh(Y_128, X_128)
+            bars.append(bh)
+            ax.set_title("128x128")
+        ax.set_xlabel("Best Score")
+        ax.set_ylabel("Model")
+        ax.set_xlim(0, 1)
+        ax.set_xticks([0, 0.25, 0.5, 0.75, 1])
+        ax.set_xticklabels(["0%", "25%", "50%", "75%", "100%"])
+        ax.invert_yaxis()
+        ax.bar_label(bh, fmt="%.3f")
+
+    for bar in bars:
+        for i in range(0, len(bar), 2):
+            rand_color = "#%06x" % random.randint(0, 0xFFFFFF)
+            bar[i].set_color(rand_color)
+            bar[i + 1].set_color(rand_color)
+
     plt.tight_layout()
     plt.show()
 
