@@ -109,11 +109,23 @@ def get_x_and_y(
     return X, y
 
 
+def assert_dataset_labels(dataset_info: np.ndarray, dataset_test_info: np.ndarray) -> None:
+    """Assert that the labels of the two datasets are the same."""
+    labels_train = [data["label"] for data in dataset_info]
+    labels_test = [data["label"] for data in dataset_test_info]
+    unique_labels_train = np.unique(labels_train)
+    unique_labels_test = np.unique(labels_test)
+    assert np.all(unique_labels_train == unique_labels_test) and len(unique_labels_train) == len(
+        unique_labels_test
+    ), "The labels of the two datasets are not the same."
+
+
 if __name__ == "__main__":
     start_time = datetime.now()
     log.info("Loading dataset information...")
     dataset_info = load_dataset_info(TRAIN_PATH, verbose=VERBOSE)
     dataset_test_info = load_dataset_info(TEST_PATH, except_labels=["livingroom (case conflict)"], verbose=VERBOSE)
+    assert_dataset_labels(dataset_info, dataset_test_info)
     log.info("Loading dataset...")
     # name, func, func_args
     feautes_map: List[Tuple[str, Callable, Tuple]] = [
