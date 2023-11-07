@@ -1,15 +1,16 @@
 import numpy as np
+from tqdm import tqdm
 from typing import Tuple
 from tinydb import TinyDB
 from pymongo import MongoClient
 from settings import DB_PATH, USE_DB, DB_IS_LOCAL, MONGO_HOST, MONGO_USER, MONGO_PASSWORD
 
 
-def __connect_to_local_db():
+def __connect_to_local_db() -> TinyDB:
     return TinyDB(DB_PATH)
 
 
-def __connect_to_remote_db():
+def __connect_to_remote_db() -> MongoClient:
     return MongoClient(MONGO_HOST, connect=True, username=MONGO_USER, password=MONGO_PASSWORD)
 
 
