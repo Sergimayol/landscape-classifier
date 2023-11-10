@@ -27,6 +27,8 @@ from preprocessor import (
 # logging configuration, set level to INFO, format to [YYYY-MM-DD HH:MM:SS] [LEVEL] MESSAGE
 log.basicConfig(level=log.INFO, format="[%(asctime)s] [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
+GLOBAL_DATASET_INFO: dict[str, int] = {}
+
 
 def load_dataset_info(path: str, except_labels: list[str] = [], verbose: bool = False) -> np.ndarray:
     """Load dataset information from the given path."""
@@ -37,6 +39,15 @@ def load_dataset_info(path: str, except_labels: list[str] = [], verbose: bool = 
         for file in os.listdir(os.path.join(path, folder)):
             dataset.append({"label": folder.lower(), "img_name": file})
     return np.array(dataset)
+
+
+def pad_or_cut_array(array: np.ndarray, max_len: int) -> np.ndarray:
+    """Pad or cut the given array to the given length."""
+    if len(array) < max_len:
+        return np.pad(array, (0, max_len - len(array)), "constant")
+    elif len(array) > max_len:
+        return array[:max_len]
+    return array
 
 
 def load_dataset(
@@ -63,9 +74,9 @@ def load_dataset(
     tuple[np.ndarray, np.ndarray]
         The dataset and the labels.
     """
-    X = []
-    y = []
+    X, y = [], []
     desc = "Loading dataset" if apply_func is None else f"Loading dataset using {apply_func.__name__}"
+    len_set = set()
     for data in tqdm(dataset, disable=not verbose, desc=desc):
         img_path = os.path.join(path, data["label"], data["img_name"])
         img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
@@ -73,8 +84,16 @@ def load_dataset(
         if apply_func is not None:
             img = apply_func(img, *func_args)
         img = img.flatten()
+        len_set.add(len(img))
         X.append(img)
         y.append(data["label"])
+    if len(len_set) > 1:
+        log.warning(f"Images have different sizes: {len_set}, padding with zeros...")
+        max_len = max([len(x) for x in X])
+        name = apply_func.__name__ if apply_func is not None else "raw"
+        if GLOBAL_DATASET_INFO.get(f"MXL{name}", None) is None:
+            GLOBAL_DATASET_INFO[f"MXL{name}"] = max_len
+        X = np.array([pad_or_cut_array(x, GLOBAL_DATASET_INFO[f"MXL{name}"]) for x in X])
     return np.array(X), np.array(y)
 
 
@@ -120,6 +139,10 @@ def assert_dataset_labels(dataset_info: np.ndarray, dataset_test_info: np.ndarra
     ), "The labels of the two datasets are not the same."
 
 
+def reset_global_metadata():
+    GLOBAL_DATASET_INFO.clear()
+
+
 if __name__ == "__main__":
     start_time = datetime.now()
     log.info("Loading dataset information...")
@@ -145,12 +168,13 @@ if __name__ == "__main__":
         "C": [0.1, 1, 10, 100],
         "kernel": ["linear", "poly", "rbf", "sigmoid"],
         "gamma": [1, 0.1, 0.01, 0.001, 0.0001, "scale", "auto"],
-        # "coef0": [0.0, 0.1, 1.0],
-        # "class_weight": ["balanced", None],
+        "coef0": [0.0, 0.1, 1.0],
+        "class_weight": ["balanced", None],
     }
     verb = 1 if VERBOSE else 0
     imgs_sizes = [(28, 28), (32, 32), (64, 64), (128, 128)]
-    for img_size in imgs_sizes:
+    # for img_size in imgs_sizes:
+    for img_size in [(128, 128)]:
         # Train and validation to find best parameters for SVM
         log.info(f"Training and validating using {img_size} image size...")
         for name, func, args in feautes_map:
@@ -227,6 +251,7 @@ if __name__ == "__main__":
                 conf_mat,
                 is_val=False,
             )
+            reset_global_metadata()
 
     end = datetime.now()
     log.info(f"Finished in {end - start_time}")
