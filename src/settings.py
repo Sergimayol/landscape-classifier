@@ -13,7 +13,7 @@ VERBOSE = True
 OUTPUT_PATH = os.path.join("..", "out")
 
 # Other info
-USE_CACHE = True
+USE_CACHE = False
 USE_DB = True
 DB_IS_LOCAL = True
 WORKERS = -1
