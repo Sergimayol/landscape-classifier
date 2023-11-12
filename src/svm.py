@@ -173,8 +173,7 @@ if __name__ == "__main__":
     }
     verb = 1 if VERBOSE else 0
     imgs_sizes = [(28, 28), (32, 32), (64, 64), (128, 128)]
-    # for img_size in imgs_sizes:
-    for img_size in [(128, 128)]:
+    for img_size in imgs_sizes:
         # Train and validation to find best parameters for SVM
         log.info(f"Training and validating using {img_size} image size...")
         for name, func, args in feautes_map:
